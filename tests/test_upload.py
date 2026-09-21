@@ -56,3 +56,21 @@ def test_upload_rejects_file_larger_than_limit() -> None:
         "detail": f"The uploaded file exceeds the {MAX_FILE_SIZE_MIB} MiB limit."
     }
 
+
+def test_upload_rejects_content_that_does_not_match_declared_type() -> None:
+    response = client.post(
+        "/documents",
+        files={
+            "file": (
+                "fake.pdf",
+                b"this is not a PDF",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 415
+    assert response.json() == {
+        "detail": "The file content does not match its declared content type."
+    }
+

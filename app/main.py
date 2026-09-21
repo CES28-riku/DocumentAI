@@ -7,10 +7,10 @@ from pydantic import BaseModel
 MAX_FILE_SIZE_MIB = 10
 MAX_FILE_SIZE = MAX_FILE_SIZE_MIB * 1024 * 1024
 
-SUPPORTED_CONTENT_TYPES = {
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
+FILE_SIGNATURES = {
+    "application/pdf": (b"%PDF-",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
 }
 
 app = FastAPI(title="Document AI API")
@@ -29,7 +29,7 @@ class DocumentUploadResponse(BaseModel):
     status_code=status.HTTP_200_OK,
 )
 async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResponse:
-    if file.content_type not in SUPPORTED_CONTENT_TYPES:
+    if file.content_type not in FILE_SIGNATURES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Only PDF, JPEG, and PNG files are supported.",
@@ -47,6 +47,14 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"The uploaded file exceeds the {MAX_FILE_SIZE_MIB} MiB limit.",
+        )
+
+    expected_signatures = FILE_SIGNATURES[file.content_type]
+
+    if not content.startswith(expected_signatures):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="The file content does not match its declared content type.",
         )
 
     return DocumentUploadResponse(
