@@ -4,7 +4,27 @@
 
 ## 現在の段階
 
-Phase 0（要件・設計）です。まだ実装は始めていません。
+Phase 1（文書取込基盤）です。現在は、アップロードされたファイルのメタデータとSHA-256を返す最小APIまで実装しています。
 
-現在の要件は [docs/requirements.md](docs/requirements.md) にまとめています。
+現在の設計資料：
 
+- [MVP要件](docs/requirements.md)
+- [データモデル設計 1](docs/data-model.md)
+- [処理状態と再実行履歴](docs/processing-lifecycle.md)
+
+## ローカルでの実行
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[test]'
+uvicorn app.main:app --reload
+```
+
+起動後、`http://127.0.0.1:8000/docs` からファイルをアップロードできます。
+
+## テスト
+
+```bash
+python -m pytest
+```
