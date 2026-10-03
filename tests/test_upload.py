@@ -1,8 +1,14 @@
 from hashlib import sha256
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import MAX_FILE_SIZE, MAX_FILE_SIZE_MIB, app
+from app.main import (
+    MAX_FILE_SIZE,
+    MAX_FILE_SIZE_MIB,
+    app,
+    build_storage_path,
+)
 
 
 client = TestClient(app)
@@ -74,3 +80,8 @@ def test_upload_rejects_content_that_does_not_match_declared_type() -> None:
         "detail": "The file content does not match its declared content type."
     }
 
+
+def test_build_storage_path_uses_hash_and_content_type_extension() -> None:
+    result = build_storage_path("abc123", "application/pdf")
+
+    assert result == Path("storage/raw/abc123.pdf")

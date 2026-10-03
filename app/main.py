@@ -1,4 +1,5 @@
 from hashlib import sha256
+from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -11,6 +12,14 @@ FILE_SIGNATURES = {
     "application/pdf": (b"%PDF-",),
     "image/jpeg": (b"\xff\xd8\xff",),
     "image/png": (b"\x89PNG\r\n\x1a\n",),
+}
+
+STORAGE_DIR = Path("storage/raw")
+
+CONTENT_TYPE_EXTENSIONS = {
+    "application/pdf": ".pdf",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
 }
 
 app = FastAPI(title="Document AI API")
@@ -64,3 +73,6 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
         sha256=sha256(content).hexdigest(),
     )
 
+def build_storage_path(file_hash: str, content_type: str) -> Path:
+    extension = CONTENT_TYPE_EXTENSIONS[content_type]
+    return STORAGE_DIR / f"{file_hash}{extension}"
