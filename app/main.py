@@ -30,6 +30,7 @@ class DocumentUploadResponse(BaseModel):
     content_type: str
     size: int
     sha256: str
+    stored: bool
 
 
 @app.post(
@@ -66,13 +67,33 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
             detail="The file content does not match its declared content type.",
         )
 
+    file_hash = sha256(content).hexdigest()
+    storage_path = build_storage_path(file_hash, file.content_type)
+    stored = save_document(content, storage_path)
+
     return DocumentUploadResponse(
         filename=file.filename or "unknown",
         content_type=file.content_type,
         size=len(content),
-        sha256=sha256(content).hexdigest(),
+        sha256=file_hash,
+        stored=stored,
     )
 
 def build_storage_path(file_hash: str, content_type: str) -> Path:
+    """Build a deterministic path so identical content uses the same destination."""
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     return STORAGE_DIR / f"{file_hash}{extension}"
+
+
+def save_document(content: bytes, storage_path: Path) -> bool:
+    """Create a file without overwriting; return False when it already exists."""
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Exclusive creation prevents duplicate uploads from overwriting the file.
+        with storage_path.open("xb") as saved_file:
+            saved_file.write(content)
+    except FileExistsError:
+        return False
+
+    return True
