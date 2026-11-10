@@ -1,7 +1,7 @@
 from hashlib import sha256
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, UploadFile, status, Form
 from pydantic import BaseModel
 
 
@@ -26,6 +26,8 @@ app = FastAPI(title="Document AI API")
 
 
 class DocumentUploadResponse(BaseModel):
+    order_number: str
+    invoice_number: str
     filename: str
     content_type: str
     size: int
@@ -38,7 +40,12 @@ class DocumentUploadResponse(BaseModel):
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_200_OK,
 )
-async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResponse:
+async def upload_document(
+        order_number: str = Form(...), 
+        invoice_number: str = Form(...),
+        file: UploadFile = File(...), 
+    ) -> DocumentUploadResponse:
+
     if file.content_type not in FILE_SIGNATURES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -72,6 +79,8 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
     stored = save_document(content, storage_path)
 
     return DocumentUploadResponse(
+        order_number=order_number,
+        invoice_number=invoice_number,
         filename=file.filename or "unknown",
         content_type=file.content_type,
         size=len(content),

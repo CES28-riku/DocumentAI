@@ -27,11 +27,23 @@ def test_upload_pdf_returns_file_metadata(
 
     response = client.post(
         "/documents",
-        files={"file": ("invoice.pdf", content, "application/pdf")},
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
+        files={
+            "file": (
+                "invoice.pdf",
+                content,
+                "application/pdf",
+            ),
+        },
     )
 
     assert response.status_code == 200
     assert response.json() == {
+        "order_number": "order-001",
+        "invoice_number": "invoice-001",
         "filename": "invoice.pdf",
         "content_type": "application/pdf",
         "size": len(content),
@@ -39,10 +51,48 @@ def test_upload_pdf_returns_file_metadata(
         "stored": True,
     }
 
+def test_upload_rejects_missing_order_number() -> None:
+    response = client.post(
+        "/documents",
+        data={
+            "invoice_number": "invoice-001",
+        },
+        files={
+            "file": (
+                "invoice.pdf",
+                b"%PDF-1.4 sample",
+                "application/pdf",
+            ),
+        },
+    )
+
+    assert response.status_code == 422
+
+def test_upload_rejects_missing_invoice_number() -> None:
+    response = client.post(
+        "/documents",
+        data={
+            "order_number": "order-001",
+        },
+        files={
+            "file": (
+                "invoice.pdf",
+                b"%PDF-1.4 sample",
+                "application/pdf",
+            ),
+        },
+    )
+
+    assert response.status_code == 422
+
 
 def test_upload_rejects_unsupported_content_type() -> None:
     response = client.post(
         "/documents",
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
         files={"file": ("invoice.txt", b"invoice", "text/plain")},
     )
 
@@ -52,6 +102,10 @@ def test_upload_rejects_unsupported_content_type() -> None:
 def test_upload_rejects_empty_file() -> None:
     response = client.post(
         "/documents",
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
         files={"file": ("invoice.pdf", b"", "application/pdf")},
     )
 
@@ -63,6 +117,10 @@ def test_upload_rejects_file_larger_than_limit() -> None:
 
     response = client.post(
         "/documents",
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
         files={"file": ("invoice.pdf", content, "application/pdf")},
     )
 
@@ -75,6 +133,10 @@ def test_upload_rejects_file_larger_than_limit() -> None:
 def test_upload_rejects_content_that_does_not_match_declared_type() -> None:
     response = client.post(
         "/documents",
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
         files={
             "file": (
                 "fake.pdf",
@@ -120,8 +182,21 @@ def test_uploading_same_pdf_twice_does_not_create_duplicate(
         "file": ("invoice.pdf", content, "application/pdf"),
     }
 
-    first_response = client.post("/documents", files=files)
-    second_response = client.post("/documents", files=files)
+    data = {
+        "order_number": "order-001",
+        "invoice_number": "invoice-001",
+    }
+
+    first_response = client.post(
+        "/documents",
+        data=data,
+        files=files,
+    )
+    second_response = client.post(
+        "/documents",
+        data=data,
+        files=files,
+    )
 
     file_hash = sha256(content).hexdigest()
     saved_path = tmp_path / f"{file_hash}.pdf"
