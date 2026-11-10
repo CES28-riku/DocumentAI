@@ -4,6 +4,12 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile, status, Form
 from pydantic import BaseModel
 
+from app.database import (
+    RegistrationResult,
+    initialize_database,
+    register_document,
+)
+
 
 MAX_FILE_SIZE_MIB = 10
 MAX_FILE_SIZE = MAX_FILE_SIZE_MIB * 1024 * 1024
@@ -22,6 +28,8 @@ CONTENT_TYPE_EXTENSIONS = {
     "image/png": ".png",
 }
 
+DATABASE_PATH = Path("data/documents.db")
+
 app = FastAPI(title="Document AI API")
 
 
@@ -33,6 +41,8 @@ class DocumentUploadResponse(BaseModel):
     size: int
     sha256: str
     stored: bool
+    document_type: str
+    registration_result: RegistrationResult
 
 
 @app.post(
@@ -44,6 +54,7 @@ async def upload_document(
         order_number: str = Form(...), 
         invoice_number: str = Form(...),
         file: UploadFile = File(...), 
+        document_type: str = Form(...),
     ) -> DocumentUploadResponse:
 
     if file.content_type not in FILE_SIGNATURES:
@@ -76,7 +87,22 @@ async def upload_document(
 
     file_hash = sha256(content).hexdigest()
     storage_path = build_storage_path(file_hash, file.content_type)
-    stored = save_document(content, storage_path)
+
+    initialize_database(DATABASE_PATH)
+
+    registration_result = register_document(
+        DATABASE_PATH,
+        order_number=order_number,
+        invoice_number=invoice_number,
+        document_type=document_type,
+        file_hash=file_hash,
+        storage_path=storage_path,
+    )
+
+    if registration_result == RegistrationResult.CONTENT_CHANGED:
+        stored = False
+    else:
+        stored = save_document(content, storage_path)
 
     return DocumentUploadResponse(
         order_number=order_number,
@@ -86,6 +112,8 @@ async def upload_document(
         size=len(content),
         sha256=file_hash,
         stored=stored,
+        document_type=document_type,
+        registration_result=registration_result,
     )
 
 def build_storage_path(file_hash: str, content_type: str) -> Path:

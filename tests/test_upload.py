@@ -1,5 +1,6 @@
 from hashlib import sha256
 from pathlib import Path
+from pytest import MonkeyPatch, fixture
 
 from fastapi.testclient import TestClient
 
@@ -11,10 +12,19 @@ from app.main import (
     save_document,
 )
 
-from pytest import MonkeyPatch
-
 
 client = TestClient(app)
+
+
+@fixture(autouse=True)
+def use_temporary_database(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.main.DATABASE_PATH",
+        tmp_path / "documents.db",
+    )
 
 
 def test_upload_pdf_returns_file_metadata(
@@ -28,6 +38,7 @@ def test_upload_pdf_returns_file_metadata(
     response = client.post(
         "/documents",
         data={
+            "document_type": "qualified_invoice",
             "order_number": "order-001",
             "invoice_number": "invoice-001",
         },
@@ -44,11 +55,13 @@ def test_upload_pdf_returns_file_metadata(
     assert response.json() == {
         "order_number": "order-001",
         "invoice_number": "invoice-001",
+        "document_type": "qualified_invoice",
         "filename": "invoice.pdf",
         "content_type": "application/pdf",
         "size": len(content),
         "sha256": sha256(content).hexdigest(),
         "stored": True,
+        "registration_result": "created",
     }
 
 def test_upload_rejects_missing_order_number() -> None:
@@ -56,6 +69,7 @@ def test_upload_rejects_missing_order_number() -> None:
         "/documents",
         data={
             "invoice_number": "invoice-001",
+            "document_type": "qualified_invoice",
         },
         files={
             "file": (
@@ -73,6 +87,7 @@ def test_upload_rejects_missing_invoice_number() -> None:
         "/documents",
         data={
             "order_number": "order-001",
+            "document_type": "qualified_invoice",
         },
         files={
             "file": (
@@ -92,6 +107,7 @@ def test_upload_rejects_unsupported_content_type() -> None:
         data={
             "order_number": "order-001",
             "invoice_number": "invoice-001",
+            "document_type": "qualified_invoice",
         },
         files={"file": ("invoice.txt", b"invoice", "text/plain")},
     )
@@ -105,6 +121,7 @@ def test_upload_rejects_empty_file() -> None:
         data={
             "order_number": "order-001",
             "invoice_number": "invoice-001",
+            "document_type": "qualified_invoice",
         },
         files={"file": ("invoice.pdf", b"", "application/pdf")},
     )
@@ -120,6 +137,7 @@ def test_upload_rejects_file_larger_than_limit() -> None:
         data={
             "order_number": "order-001",
             "invoice_number": "invoice-001",
+            "document_type": "qualified_invoice",
         },
         files={"file": ("invoice.pdf", content, "application/pdf")},
     )
@@ -136,6 +154,7 @@ def test_upload_rejects_content_that_does_not_match_declared_type() -> None:
         data={
             "order_number": "order-001",
             "invoice_number": "invoice-001",
+            "document_type": "qualified_invoice",
         },
         files={
             "file": (
@@ -185,6 +204,7 @@ def test_uploading_same_pdf_twice_does_not_create_duplicate(
     data = {
         "order_number": "order-001",
         "invoice_number": "invoice-001",
+        "document_type": "qualified_invoice",
     }
 
     first_response = client.post(
@@ -204,4 +224,23 @@ def test_uploading_same_pdf_twice_does_not_create_duplicate(
     assert first_response.json()["stored"] is True
     assert second_response.json()["stored"] is False
     assert saved_path.read_bytes() == content
-    assert len(list(tmp_path.iterdir())) == 1
+    assert len(list(tmp_path.glob("*.pdf"))) == 1
+
+
+def test_upload_rejects_missing_document_type() -> None:
+    response = client.post(
+        "/documents",
+        data={
+            "order_number": "order-001",
+            "invoice_number": "invoice-001",
+        },
+        files={
+            "file": (
+                "invoice.pdf",
+                b"%PDF-1.4 sample",
+                "application/pdf",
+            ),
+        },
+    )
+
+    assert response.status_code == 422
