@@ -244,3 +244,63 @@ def test_upload_rejects_missing_document_type() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_uploading_changed_pdf_for_same_business_key_preserves_original(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+
+    data = {
+        "order_number": "order-001",
+        "invoice_number": "invoice-001",
+        "document_type": "qualified_invoice",
+    }
+
+    original_content = b"%PDF-1.4 original invoice"
+    changed_content = b"%PDF-1.4 changed invoice"
+
+    storage_dir = tmp_path / "storage"
+    monkeypatch.setattr("app.main.STORAGE_DIR", storage_dir)
+
+    first_response = client.post(
+        "/documents",
+        data=data,
+        files={
+            "file": (
+                "invoice.pdf",
+                original_content,
+                "application/pdf",
+            )
+        },
+    )
+
+    second_response = client.post(
+        "/documents",
+        data=data,
+        files={
+            "file": (
+                "invoice.pdf",
+                changed_content,
+                "application/pdf",
+            )
+        },
+    )
+
+    original_hash = sha256(original_content).hexdigest()
+    changed_hash = sha256(changed_content).hexdigest()
+
+    original_path = storage_dir / f"{original_hash}.pdf"
+    changed_path = storage_dir / f"{changed_hash}.pdf"
+
+    assert first_response.status_code == 200
+    assert first_response.json()["registration_result"] == "created"
+    assert first_response.json()["stored"] is True
+
+    assert second_response.status_code == 200
+    assert second_response.json()["registration_result"] == "content_changed"
+    assert second_response.json()["stored"] is False
+
+    assert original_path.read_bytes() == original_content
+    assert changed_path.exists() is False
+    assert len(list(storage_dir.glob("*.pdf"))) == 1
